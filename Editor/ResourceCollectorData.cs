@@ -18,8 +18,60 @@ namespace ME.ResourceCollector {
         }
 
         public System.Collections.Generic.List<Item> items = new System.Collections.Generic.List<Item>();
-        private System.Collections.Generic.Dictionary<string, long> cacheSizes = new System.Collections.Generic.Dictionary<string, long>();
-        private System.Collections.Generic.Dictionary<string, string> cacheSizesStr = new System.Collections.Generic.Dictionary<string, string>();
+        private readonly System.Collections.Generic.Dictionary<string, long> cacheSizes = new System.Collections.Generic.Dictionary<string, long>();
+        private readonly System.Collections.Generic.Dictionary<string, string> cacheSizesStr = new System.Collections.Generic.Dictionary<string, string>();
+
+        public bool Delete(string guid) {
+
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                var item = this.items[i];
+                if (item.guid == guid) {
+                    
+                    this.cacheSizes.Remove(guid);
+                    this.cacheSizesStr.Remove(guid);
+                    this.items.RemoveAt(i);
+                    return true;
+                    
+                }
+
+            }
+            
+            return false;
+
+        }
+
+        public bool Refresh(string guid, bool addOnFail = true) {
+            
+            var visited = new System.Collections.Generic.HashSet<object>();
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                var item = this.items[i];
+                if (item.guid == guid) {
+
+                    this.cacheSizes.Remove(guid);
+                    this.cacheSizesStr.Remove(guid);
+                    
+                    if (item.deps != null) item.deps.Clear();
+                    if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
+                    this.UpdateSize(ref item, visited);
+                    this.items[i] = item;
+                    
+                    var str = UnityEditor.EditorUtility.FormatBytes(item.size);
+                    this.cacheSizesStr.Add(guid, str);
+                    return true;
+                    
+                }
+
+            }
+
+            if (addOnFail == false) return false;
+            
+            var asset = UnityEditor.AssetDatabase.LoadAssetAtPath<Object>(UnityEditor.AssetDatabase.GUIDToAssetPath(guid));
+            this.Add(asset);
+            return this.Refresh(guid, addOnFail: false);
+            
+        }
 
         public System.Collections.Generic.List<Object> GetDependencies(string guid) {
 
@@ -48,10 +100,33 @@ namespace ME.ResourceCollector {
             for (int i = 0; i < this.items.Count; ++i) {
 
                 var item = this.items[i];
-                if (this.cacheSizesStr.ContainsKey(item.guid) == false) this.cacheSizesStr.Add(item.guid, UnityEditor.EditorUtility.FormatBytes(item.size));
+                if (this.cacheSizesStr.ContainsKey(item.guid) == false) {
+                    
+                    this.cacheSizesStr.Add(item.guid, UnityEditor.EditorUtility.FormatBytes(item.size));
+                    
+                }
                 
             }
             
+            this.cacheSizes.Clear();
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                var item = this.items[i];
+                if (this.cacheSizes.ContainsKey(item.guid) == false) {
+                    
+                    this.cacheSizes.Add(item.guid, item.size);
+                    
+                }
+                
+            }
+            
+        }
+
+        private void UpdateSize(ref Item item, System.Collections.Generic.HashSet<object> visited = null) {
+            
+            item.size = Utils.GetObjectSize(this, item.obj, visited, item.deps, collectUnityObjects: true);
+            item.deps.Remove(item.obj);
+
         }
 
         public void CalculateSizes() {
@@ -67,7 +142,7 @@ namespace ME.ResourceCollector {
                 {
                     visited.Clear();
                     if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
-                    item.size = Utils.GetObjectSize(this, item.obj, visited, item.deps, collectUnityObjects: true);
+                    this.UpdateSize(ref item, visited);
                 }
                 this.items[i] = item;
 
@@ -101,6 +176,23 @@ namespace ME.ResourceCollector {
             
         }
 
+        private Item GetItem(string guid) {
+            
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                var item = this.items[i];
+                if (item.guid == guid) {
+
+                    return item;
+
+                }
+
+            }
+
+            return default;
+
+        }
+
         public bool GetSize(object obj, out long size) {
 
             size = -1L;
@@ -114,6 +206,10 @@ namespace ME.ResourceCollector {
                     return true;
                     
                 }
+
+                size = this.GetItem(guid).size;
+                size = this.UpdateSize(obj, size);
+                return true;
 
             }
             

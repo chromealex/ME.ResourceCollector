@@ -10,28 +10,41 @@ namespace ME.ResourceCollector {
 
         static HierarchyGUIEditor() {
 
+            HierarchyGUIEditor.Reassign();
+
+        }
+
+        [InitializeOnLoadMethod]
+        public static void Reassign() {
+            
+            EditorApplication.projectWindowItemOnGUI -= HierarchyGUIEditor.OnElementGUI;
             EditorApplication.projectWindowItemOnGUI += HierarchyGUIEditor.OnElementGUI;
 
         }
 
-        private static GUIStyle labelStyle;
+        private static GUIStyle buttonStyle;
         private static ResourceCollectorData resourceCollectorData;
         public static void OnElementGUI(string guid, UnityEngine.Rect rect) {
 
-            if (HierarchyGUIEditor.labelStyle == null) {
-                HierarchyGUIEditor.labelStyle = new GUIStyle(EditorStyles.miniPullDown);
-                HierarchyGUIEditor.labelStyle.alignment = TextAnchor.MiddleRight;
+            if (HierarchyGUIEditor.buttonStyle == null) {
+                HierarchyGUIEditor.buttonStyle = new GUIStyle(EditorStyles.miniPullDown);
+                HierarchyGUIEditor.buttonStyle.fontSize = 10;
+                HierarchyGUIEditor.buttonStyle.alignment = TextAnchor.MiddleRight;
             }
+            
             if (HierarchyGUIEditor.resourceCollectorData == null) HierarchyGUIEditor.resourceCollectorData = ResourceCollector.GetData();
             if (HierarchyGUIEditor.resourceCollectorData == null) return;
 
             var size = HierarchyGUIEditor.resourceCollectorData.GetSizeStr(guid);
             if (string.IsNullOrEmpty(size) == false) {
+                
                 var selectionRect = new Rect(rect);
-                var s = HierarchyGUIEditor.labelStyle.CalcSize(new GUIContent(size));
+                var s = HierarchyGUIEditor.buttonStyle.CalcSize(new GUIContent(size));
                 selectionRect.width = s.x;
+                selectionRect.height = EditorGUIUtility.singleLineHeight;
                 selectionRect.x = rect.x + rect.width - selectionRect.width;
-                if (GUI.Button(selectionRect, size, HierarchyGUIEditor.labelStyle) == true) {
+                
+                if (GUI.Button(selectionRect, size, HierarchyGUIEditor.buttonStyle) == true) {
 
                     var p = GUIUtility.GUIToScreenPoint(selectionRect.min);
                     selectionRect.x = p.x;
@@ -39,6 +52,7 @@ namespace ME.ResourceCollector {
                     DependenciesPopup.Show(selectionRect, new Vector2(200f, 300f), HierarchyGUIEditor.resourceCollectorData, guid);
 
                 }
+                
             }
 
         }
@@ -63,9 +77,17 @@ namespace ME.ResourceCollector {
             popup.data = data;
             popup.guid = guid;
             popup.size = size;
-            popup.deps = data.GetDependencies(guid).OrderByDescending(x => {
+            popup.rect = buttonRect;
+            popup.UpdateDeps();
+            popup.ShowAsDropDown(buttonRect, size);
+            
+        }
 
-                if (data.GetSize(x, out var size) == true) {
+        private void UpdateDeps() {
+            
+            this.deps = this.data.GetDependencies(this.guid).OrderByDescending(x => {
+
+                if (this.data.GetSize(x, out var size) == true) {
                     
                     return size;
                     
@@ -74,8 +96,6 @@ namespace ME.ResourceCollector {
                 return -1L;
 
             }).ToList();
-            popup.rect = buttonRect;
-            popup.ShowAsDropDown(buttonRect, size);
             
         }
 
@@ -83,12 +103,28 @@ namespace ME.ResourceCollector {
             
             if (this.deps != null) {
 
-                GUILayout.Label("References Count: " + this.deps.Count);
+                GUILayout.BeginHorizontal(GUILayout.Height(20f));
+                GUILayout.BeginVertical();
+                GUILayout.FlexibleSpace();
+                GUILayout.Label("References Count: " + this.deps.Count, EditorStyles.miniLabel);
+                GUILayout.FlexibleSpace();
+                GUILayout.EndVertical();
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Refresh", EditorStyles.miniButton) == true) {
+
+                    if (this.data.Refresh(this.guid) == true) {
+
+                        this.UpdateDeps();
+
+                    }
+
+                }
+                GUILayout.EndHorizontal();
+                this.height = 0f;
                 if (this.heightCalc == false) {
 
-                    this.height += EditorGUIUtility.singleLineHeight;
-                    this.height += EditorGUIUtility.singleLineHeight;
-                    this.height += EditorGUIUtility.singleLineHeight;
+                    var rect = GUILayoutUtility.GetLastRect();
+                    this.height += rect.height;
 
                 }
                 
@@ -102,15 +138,16 @@ namespace ME.ResourceCollector {
                     HierarchyGUIEditor.OnElementGUI(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(dep)), rect);
                     if (this.heightCalc == false) {
 
-                        this.height += EditorGUIUtility.singleLineHeight;
+                        this.height += rect.height + 2f;
 
                     }
                     
                 }
                 GUILayout.EndScrollView();
+                
+                if (Event.current.type == EventType.Repaint && this.heightCalc == false) {
 
-                if (this.heightCalc == false) {
-
+                    this.height += 10f;
                     if (this.size.y > this.height) {
                         this.size.y = this.height;
                         this.ShowAsDropDown(this.rect, this.size);
