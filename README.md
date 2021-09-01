@@ -1,5 +1,15 @@
 # ME.ResourceCollector
 
+<img src="https://github.com/chromealex/ME.ResourceCollector/blob/Docs/ME-ResourceCollector.gif?raw=true" width="400px" height="200px" align="left" />
+<div><h4>ME.ResourceCollector - it's a simple tool to measure assets and gather dependencies to avoid AssetBundle/Addressables duplicates.</h4></div>
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://github.com/chromealex/ecs/blob/master/LICENSE)
+
+<br>
+<br>
+<br>
+<br>
+
 ## Install
 
 ### Using submodule
