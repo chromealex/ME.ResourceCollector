@@ -70,6 +70,8 @@ namespace ME.ResourceCollector {
                     this.cacheSizes.Remove(guid);
                     this.cacheSizesStr.Remove(guid);
                     
+                    this.cacheSizes.Add(guid, 0L);
+                    
                     if (item.deps != null) item.deps.Clear();
                     if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
                     this.UpdateSize(ref item, visited);
@@ -222,14 +224,16 @@ namespace ME.ResourceCollector {
                 if (this.cacheSizes.TryGetValue(guid, out var count) == true) {
                     
                     size = count;
-                    return true;
+                    return size > 0L;
                     
                 }
 
                 size = this.GetItem(guid).size;
-                size = this.UpdateSize(obj, size);
-                return true;
-
+                if (size > 0L) {
+                    size = this.UpdateSize(obj, size);
+                    return true;
+                }
+                
             }
             
             return false;
@@ -797,7 +801,10 @@ namespace ME.ResourceCollector {
                     size += data.UpdateSize(tex, Utils.GetTextureSize(tex));
                 }
 
-            } else if (typeof(UnityEngine.Texture).IsAssignableFrom(type) == true) {
+            } else if (type == typeof(UnityEngine.Texture) ||
+                       type == typeof(UnityEngine.Texture2D) ||
+                       type == typeof(UnityEngine.RenderTexture) ||
+                       typeof(UnityEngine.Texture).IsAssignableFrom(type) == true) {
 
                 var tex = (UnityEngine.Texture)obj;
                 if (tex == null) {
