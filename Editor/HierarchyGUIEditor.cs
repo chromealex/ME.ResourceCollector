@@ -14,6 +14,19 @@ namespace ME.ResourceCollector {
 
         }
 
+        [UnityEditor.Callbacks.DidReloadScripts]
+        public static void OnAssemblyReload() {
+            
+            HierarchyGUIEditor.Reassign();
+
+            EditorApplication.delayCall += () => {
+                
+                HierarchyGUIEditor.Reassign();
+
+            };
+
+        }
+
         [InitializeOnLoadMethod]
         public static void Reassign() {
             
