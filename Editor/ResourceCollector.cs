@@ -14,7 +14,7 @@ namespace ME.ResourceCollector {
             
         }
 
-        [UnityEditor.MenuItem("ME.Tools/Recalculate Resource Sizes")]
+        [UnityEditor.MenuItem("Tools/ME.ResourceCollector/Recalculate Resource Sizes")]
         public static void CalculateSizes() {
 
             var data = GetData();
@@ -35,7 +35,7 @@ namespace ME.ResourceCollector {
 
         }
         
-        [UnityEditor.MenuItem("ME.Tools/Update Resources")]
+        [UnityEditor.MenuItem("Tools/ME.ResourceCollector/Update Resources")]
         public static void Collect() {
 
             var dataPath = "Assets/ME.ResourceCollector/Editor/EditorData.asset";

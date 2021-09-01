@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace ME.ResourceCollector {
 
     using UnityEditor;
@@ -8,7 +10,7 @@ namespace ME.ResourceCollector {
 
         static HierarchyGUIEditor() {
 
-            EditorApplication.projectWindowItemOnGUI += OnElementGUI;
+            EditorApplication.projectWindowItemOnGUI += HierarchyGUIEditor.OnElementGUI;
 
         }
 
@@ -16,20 +18,20 @@ namespace ME.ResourceCollector {
         private static ResourceCollectorData resourceCollectorData;
         public static void OnElementGUI(string guid, UnityEngine.Rect rect) {
 
-            if (labelStyle == null) {
-                labelStyle = new GUIStyle(EditorStyles.miniPullDown);
+            if (HierarchyGUIEditor.labelStyle == null) {
+                HierarchyGUIEditor.labelStyle = new GUIStyle(EditorStyles.miniPullDown);
                 HierarchyGUIEditor.labelStyle.alignment = TextAnchor.MiddleRight;
             }
-            if (resourceCollectorData == null) HierarchyGUIEditor.resourceCollectorData = ResourceCollector.GetData();
+            if (HierarchyGUIEditor.resourceCollectorData == null) HierarchyGUIEditor.resourceCollectorData = ResourceCollector.GetData();
             if (HierarchyGUIEditor.resourceCollectorData == null) return;
 
             var size = HierarchyGUIEditor.resourceCollectorData.GetSizeStr(guid);
             if (string.IsNullOrEmpty(size) == false) {
                 var selectionRect = new Rect(rect);
-                var s = labelStyle.CalcSize(new GUIContent(size));
+                var s = HierarchyGUIEditor.labelStyle.CalcSize(new GUIContent(size));
                 selectionRect.width = s.x;
                 selectionRect.x = rect.x + rect.width - selectionRect.width;
-                if (GUI.Button(selectionRect, size, labelStyle) == true) {
+                if (GUI.Button(selectionRect, size, HierarchyGUIEditor.labelStyle) == true) {
 
                     var p = GUIUtility.GUIToScreenPoint(selectionRect.min);
                     selectionRect.x = p.x;
@@ -57,11 +59,21 @@ namespace ME.ResourceCollector {
         
         public static void Show(Rect buttonRect, Vector2 size, ResourceCollectorData data, string guid) {
             
-            var popup = EditorWindow.CreateInstance<DependenciesPopup>();
+            var popup = DependenciesPopup.CreateInstance<DependenciesPopup>();
             popup.data = data;
             popup.guid = guid;
             popup.size = size;
-            popup.deps = data.GetDependencies(guid);
+            popup.deps = data.GetDependencies(guid).OrderByDescending(x => {
+
+                if (data.GetSize(x, out var size) == true) {
+                    
+                    return size;
+                    
+                }
+
+                return -1L;
+
+            }).ToList();
             popup.rect = buttonRect;
             popup.ShowAsDropDown(buttonRect, size);
             
@@ -71,7 +83,7 @@ namespace ME.ResourceCollector {
             
             if (this.deps != null) {
 
-                GUILayout.Label("References Count: " + deps.Count);
+                GUILayout.Label("References Count: " + this.deps.Count);
                 if (this.heightCalc == false) {
 
                     this.height += EditorGUIUtility.singleLineHeight;
@@ -81,9 +93,13 @@ namespace ME.ResourceCollector {
                 }
                 
                 this.scrollPosition = GUILayout.BeginScrollView(this.scrollPosition);
-                foreach (var dep in deps) {
-                    
+                foreach (var dep in this.deps) {
+
+                    EditorGUI.BeginDisabledGroup(true);
                     EditorGUILayout.ObjectField(dep, typeof(Object), allowSceneObjects: true);
+                    EditorGUI.EndDisabledGroup();
+                    var rect = GUILayoutUtility.GetLastRect();
+                    HierarchyGUIEditor.OnElementGUI(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(dep)), rect);
                     if (this.heightCalc == false) {
 
                         this.height += EditorGUIUtility.singleLineHeight;
@@ -97,7 +113,7 @@ namespace ME.ResourceCollector {
 
                     if (this.size.y > this.height) {
                         this.size.y = this.height;
-                        ShowAsDropDown(this.rect, this.size);
+                        this.ShowAsDropDown(this.rect, this.size);
                     }
 
                     this.heightCalc = true;
