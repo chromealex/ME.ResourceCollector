@@ -58,6 +58,7 @@ namespace ME.ResourceCollector {
                     this.items[i] = item;
                     
                     var str = UnityEditor.EditorUtility.FormatBytes(item.size);
+                    if (this.cacheSizes.ContainsKey(guid) == false) this.cacheSizes.Add(guid, item.size);
                     this.cacheSizesStr.Add(guid, str);
                     return true;
                     
