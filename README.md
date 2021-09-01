@@ -9,7 +9,7 @@ Add as a submodule this repository https://github.com/chromealex/ME.ResourceColl
 ### Using Unity Package Manager
 
 1. Open Packages/manifest.json file.
-2. Add ME.ECS to your dependencies section:
+2. Add ME.ResourceCollector``` to your dependencies section:
 ```
 {
   "dependencies": {
