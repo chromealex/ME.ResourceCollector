@@ -1,0 +1,30 @@
+{
+  "name": "com.me.resourcecollector",
+  "version": "1.0.0",
+  "displayName": "ME.ResourceCollector",
+  "description": "ME.ResourceCollector - it's a simple tool to measure assets and gather dependencies to avoid AssetBundle/Addressables duplicates.",
+  "unity": "2020.3",
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "General",
+      "url": "https://github.com/chromealex/ME.ResourceCollector.git",
+      "scopes": [
+        "com.me.resourcecollector"
+      ]
+    }
+  ],
+ "keywords": [
+    "unity",
+    "resources",
+    "addressables",
+    "bundles",
+    "memory",
+    "editor",
+    "profiling"
+  ],
+  "author": {
+    "name": "Alex Silaev",
+    "email": "chrome.alex@gmail.com"
+  }
+}
