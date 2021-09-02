@@ -115,7 +115,7 @@ namespace ME.ResourceCollector {
         
         public string GetSizeStr(string guid) {
 
-            if (this.cacheSizesStr.Count != this.items.Count) this.BuildCache();
+            if (this.cacheSizesStr.Count < 100) this.BuildCache();
 
             if (this.cacheSizesStr.TryGetValue(guid, out var str) == true) return str;
             return string.Empty;
