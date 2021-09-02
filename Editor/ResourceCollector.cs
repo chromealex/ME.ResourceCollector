@@ -39,6 +39,12 @@ namespace ME.ResourceCollector {
         private readonly System.Collections.Generic.Dictionary<string, long> cacheSizes = new System.Collections.Generic.Dictionary<string, long>();
         private readonly System.Collections.Generic.Dictionary<string, string> cacheSizesStr = new System.Collections.Generic.Dictionary<string, string>();
 
+        public void Save() {
+            
+            EditorUtility.SetDirty(this);
+            
+        }
+
         public bool Delete(string guid) {
 
             for (int i = 0; i < this.items.Count; ++i) {
@@ -76,6 +82,7 @@ namespace ME.ResourceCollector {
                     if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
                     this.UpdateSize(ref item, visited);
                     this.items[i] = item;
+                    this.Save();
                     
                     var str = UnityEditor.EditorUtility.FormatBytes(item.size);
                     if (this.cacheSizes.ContainsKey(guid) == false) this.cacheSizes.Add(guid, item.size);
@@ -108,7 +115,7 @@ namespace ME.ResourceCollector {
         
         public string GetSizeStr(string guid) {
 
-            if (this.cacheSizesStr.Count == 0) this.BuildCache();
+            if (this.cacheSizesStr.Count != this.items.Count) this.BuildCache();
 
             if (this.cacheSizesStr.TryGetValue(guid, out var str) == true) return str;
             return string.Empty;
@@ -170,6 +177,7 @@ namespace ME.ResourceCollector {
             }
 
             this.BuildCache();
+            this.Save();
             
             UnityEditor.EditorUtility.ClearProgressBar();
 
@@ -249,6 +257,7 @@ namespace ME.ResourceCollector {
                 guid = UnityEditor.AssetDatabase.AssetPathToGUID(UnityEditor.AssetDatabase.GetAssetPath(obj)),
                 size = 0L,
             });
+            this.Save();
             
         }
 
