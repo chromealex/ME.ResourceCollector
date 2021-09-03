@@ -846,6 +846,12 @@ namespace ME.ResourceCollector {
 
             } else {
 
+                if (typeof(UnityEngine.ScriptableObject).IsAssignableFrom(type) == true) {
+
+                    deps.Add((UnityEngine.ScriptableObject)obj);
+
+                }
+
                 var fields = type.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
                 if (fields.Length == 0 && type.IsValueType == true) {
 
