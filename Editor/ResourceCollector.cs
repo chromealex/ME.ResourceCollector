@@ -25,18 +25,34 @@ namespace ME.ResourceCollector {
         }
         
         [System.Serializable]
+        public struct DependencyInfo {
+
+            public Object obj;
+            public int depth;
+
+            public DependencyInfo(Object obj, int depth) {
+
+                this.obj = obj;
+                this.depth = depth;
+
+            }
+
+        }
+
+        [System.Serializable]
         public struct Item {
 
             public Object obj;
             public string guid;
             public long size;
 
-            public System.Collections.Generic.List<Object> deps;
+            public System.Collections.Generic.List<DependencyInfo> deps;
+            public System.Collections.Generic.List<Object> references;
 
         }
 
         public System.Collections.Generic.List<Item> items = new System.Collections.Generic.List<Item>();
-        private readonly System.Collections.Generic.Dictionary<string, long> cacheSizes = new System.Collections.Generic.Dictionary<string, long>();
+        private readonly System.Collections.Generic.Dictionary<string, Item> cacheSizes = new System.Collections.Generic.Dictionary<string, Item>();
         private readonly System.Collections.Generic.Dictionary<string, string> cacheSizesStr = new System.Collections.Generic.Dictionary<string, string>();
 
         public void Save() {
@@ -76,16 +92,17 @@ namespace ME.ResourceCollector {
                     this.cacheSizes.Remove(guid);
                     this.cacheSizesStr.Remove(guid);
                     
-                    this.cacheSizes.Add(guid, 0L);
+                    this.cacheSizes.Add(guid, default);
                     
                     if (item.deps != null) item.deps.Clear();
-                    if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
+                    if (item.deps == null) item.deps = new System.Collections.Generic.List<DependencyInfo>();
                     this.UpdateSize(ref item, visited);
+                    this.UpdateReferences(ref item);
                     this.items[i] = item;
                     this.Save();
                     
                     var str = UnityEditor.EditorUtility.FormatBytes(item.size);
-                    if (this.cacheSizes.ContainsKey(guid) == false) this.cacheSizes.Add(guid, item.size);
+                    if (this.cacheSizes.ContainsKey(guid) == false) this.cacheSizes.Add(guid, item);
                     this.cacheSizesStr.Add(guid, str);
                     return true;
                     
@@ -101,7 +118,31 @@ namespace ME.ResourceCollector {
             
         }
 
-        public System.Collections.Generic.List<Object> GetDependencies(string guid) {
+        public void UpdateReferences(ref Item item) {
+
+            if (item.references == null) item.references = new List<Object>();
+            item.references.Clear();
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                var data = this.items[i];
+                if (data.guid == item.guid) continue;
+                
+                for (int j = 0; j < data.deps.Count; ++j) {
+                    
+                    if (data.deps[j].obj == item.obj && data.deps[j].depth == 0) {
+                        
+                        item.references.Add(data.obj);
+                        break;
+
+                    }
+                    
+                }
+
+            }
+            
+        }
+
+        public System.Collections.Generic.List<DependencyInfo> GetDependencies(string guid) {
 
             for (int i = 0; i < this.items.Count; ++i) {
 
@@ -112,10 +153,22 @@ namespace ME.ResourceCollector {
             return null;
 
         }
-        
+
+        public System.Collections.Generic.List<Object> GetReferences(string guid) {
+
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                if (this.items[i].guid == guid) return this.items[i].references;
+
+            }
+            
+            return null;
+
+        }
+
         public string GetSizeStr(string guid) {
 
-            if (this.cacheSizesStr.Count < 100) this.BuildCache();
+            if (this.cacheSizesStr.Count != this.items.Count) this.BuildCache();
 
             if (this.cacheSizesStr.TryGetValue(guid, out var str) == true) return str;
             return string.Empty;
@@ -142,7 +195,7 @@ namespace ME.ResourceCollector {
                 var item = this.items[i];
                 if (this.cacheSizes.ContainsKey(item.guid) == false) {
                     
-                    this.cacheSizes.Add(item.guid, item.size);
+                    this.cacheSizes.Add(item.guid, item);
                     
                 }
                 
@@ -152,8 +205,9 @@ namespace ME.ResourceCollector {
 
         private void UpdateSize(ref Item item, System.Collections.Generic.HashSet<object> visited = null) {
             
-            item.size = Utils.GetObjectSize(this, item.obj, visited, item.deps, collectUnityObjects: true);
-            item.deps.Remove(item.obj);
+            item.size = Utils.GetObjectSize(this, null, item.obj, visited, item.deps, collectUnityObjects: true);
+            var obj = item.obj;
+            item.deps.RemoveAll(x => x.obj == obj);
 
         }
 
@@ -169,9 +223,17 @@ namespace ME.ResourceCollector {
 
                 {
                     visited.Clear();
-                    if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
+                    if (item.deps == null) item.deps = new System.Collections.Generic.List<DependencyInfo>();
                     this.UpdateSize(ref item, visited);
                 }
+                this.items[i] = item;
+
+            }
+
+            for (int i = 0; i < this.items.Count; ++i) {
+
+                var item = this.items[i];
+                this.UpdateReferences(ref item);
                 this.items[i] = item;
 
             }
@@ -189,13 +251,15 @@ namespace ME.ResourceCollector {
 
                 var p = UnityEditor.AssetDatabase.GetAssetPath(tObj);
                 var guid = UnityEditor.AssetDatabase.AssetPathToGUID(p);
-                if (this.cacheSizes.TryGetValue(guid, out var count) == true) {
-                    
-                    this.cacheSizes[guid] = size;
+                if (this.cacheSizes.TryGetValue(guid, out _) == true) {
+
+                    var item = this.cacheSizes[guid];
+                    item.size = size;
+                    this.cacheSizes[guid] = item;
                     
                 } else {
                     
-                    this.cacheSizes.Add(guid, size);
+                    this.cacheSizes.Add(guid, this.GetItem(guid));
                     
                 }
 
@@ -205,7 +269,7 @@ namespace ME.ResourceCollector {
             
         }
 
-        private Item GetItem(string guid) {
+        public Item GetItem(string guid) {
             
             for (int i = 0; i < this.items.Count; ++i) {
 
@@ -222,6 +286,12 @@ namespace ME.ResourceCollector {
 
         }
 
+        public bool GetItemCached(string guid, out Item item) {
+
+            return this.cacheSizes.TryGetValue(guid, out item);
+            
+        }
+
         public bool GetSize(object obj, out long size) {
 
             size = -1L;
@@ -229,9 +299,9 @@ namespace ME.ResourceCollector {
 
                 var p = UnityEditor.AssetDatabase.GetAssetPath(tObj);
                 var guid = UnityEditor.AssetDatabase.AssetPathToGUID(p);
-                if (this.cacheSizes.TryGetValue(guid, out var count) == true) {
+                if (this.cacheSizes.TryGetValue(guid, out var item) == true) {
                     
-                    size = count;
+                    size = item.size;
                     return size > 0L;
                     
                 }
@@ -261,20 +331,20 @@ namespace ME.ResourceCollector {
             
         }
 
-        public string testGuid;
+        /*public string testGuid;
         [ContextMenu("Test")]
         public void Test() {
             
             var visited = new System.Collections.Generic.HashSet<object>();
             var item = this.items.FirstOrDefault(x => x.guid == this.testGuid);
-            if (item.deps == null) item.deps = new System.Collections.Generic.List<Object>();
+            if (item.deps == null) item.deps = new System.Collections.Generic.List<DependencyInfo>();
             item.size = Utils.GetObjectSize(this, item.obj, visited, item.deps, collectUnityObjects: true);
             Debug.Log("Obj size: " + item.size);
             foreach (var obj in visited) {
                 Debug.Log(obj);
             }
 
-        }
+        }*/
 
     }
     #endregion
@@ -321,6 +391,7 @@ namespace ME.ResourceCollector {
 
             try {
 
+                var collected = new HashSet<string>();
                 for (int i = 0; i < searches.Length; ++i) {
                     
                     EditorUtility.DisplayProgressBar("Collect Objects", searches[i], i / (float)searches.Length);
@@ -332,7 +403,8 @@ namespace ME.ResourceCollector {
                         var obj = AssetDatabase.LoadAssetAtPath<Object>(path);
                         if (obj != null) {
 
-                            data.Add(obj);
+                            if (collected.Contains(guid) == false) data.Add(obj);
+                            collected.Add(guid);
 
                         }
                     
@@ -435,16 +507,31 @@ namespace ME.ResourceCollector {
                 selectionRect.width = s.x;
                 selectionRect.height = EditorGUIUtility.singleLineHeight;
                 selectionRect.x = rect.x + rect.width - selectionRect.width;
-                
+
                 if (GUI.Button(selectionRect, size, HierarchyGUIEditor.buttonStyle) == true) {
 
+                    var item = HierarchyGUIEditor.resourceCollector.GetItem(guid);
                     var p = GUIUtility.GUIToScreenPoint(selectionRect.min);
                     selectionRect.x = p.x;
                     selectionRect.y = p.y;
-                    DependenciesPopup.Show(selectionRect, new Vector2(200f, 300f), HierarchyGUIEditor.resourceCollector, guid);
+                    DependenciesPopup.Show(selectionRect, new Vector2(200f, 500f), HierarchyGUIEditor.resourceCollector, item);
 
                 }
                 
+                if (HierarchyGUIEditor.resourceCollector.GetItemCached(guid, out var itemCached) == true && itemCached.references != null && itemCached.references.Count == 0) {
+
+                    var r = selectionRect;
+                    r.x += r.width - 1f;
+                    r.width = 1f;
+                    r.y += 2f;
+                    r.height -= 4f;
+                    var prevColor = GUI.color;
+                    GUI.color = Color.cyan;
+                    GUI.DrawTexture(r, Texture2D.whiteTexture, ScaleMode.StretchToFill);
+                    GUI.color = prevColor;
+                    
+                }
+
             }
 
         }
@@ -453,31 +540,53 @@ namespace ME.ResourceCollector {
 
     public class DependenciesPopup : EditorWindow {
 
-        public Vector2 scrollPosition;
+        public Vector2 scrollPositionReferences;
+        public Vector2 scrollPositionDependencies;
         public Rect rect;
         public Vector2 size;
         private ResourceCollector data;
-        private string guid;
-        private System.Collections.Generic.List<Object> deps;
-
+        private ResourceCollector.Item item;
+        
         private float height;
         private bool heightCalc;
         
-        public static void Show(Rect buttonRect, Vector2 size, ResourceCollector data, string guid) {
+        public static void Show(Rect buttonRect, Vector2 size, ResourceCollector data, ResourceCollector.Item item) {
             
             var popup = DependenciesPopup.CreateInstance<DependenciesPopup>();
             popup.data = data;
-            popup.guid = guid;
+            popup.item = item;
             popup.size = size;
             popup.rect = buttonRect;
             popup.UpdateDeps();
+            popup.UpdateReferences();
             popup.ShowAsDropDown(buttonRect, size);
             
         }
 
         private void UpdateDeps() {
             
-            this.deps = this.data.GetDependencies(this.guid).OrderByDescending(x => {
+            this.item.deps = this.data.GetDependencies(this.item.guid).Where(x => {
+
+                return x.depth == 0;
+
+            }).OrderByDescending(x => {
+
+                if (this.data.GetSize(x.obj, out var size) == true) {
+                    
+                    return size;
+                    
+                }
+
+                return -1L;
+
+            }).ToList();
+            this.heightCalc = false;
+            
+        }
+
+        private void UpdateReferences() {
+            
+            this.item.references = this.data.GetReferences(this.item.guid).OrderByDescending(x => {
 
                 if (this.data.GetSize(x, out var size) == true) {
                     
@@ -488,31 +597,33 @@ namespace ME.ResourceCollector {
                 return -1L;
 
             }).ToList();
+            this.heightCalc = false;
             
         }
 
         private void OnGUI() {
-            
-            if (this.deps != null) {
 
+            this.height = 0f;
+            
+            if (this.item.references != null) {
+                
                 GUILayout.BeginHorizontal(GUILayout.Height(20f));
                 GUILayout.BeginVertical();
                 GUILayout.FlexibleSpace();
-                GUILayout.Label("References Count: " + this.deps.Count, EditorStyles.miniLabel);
+                GUILayout.Label("Referenced by: " + this.item.references.Count, EditorStyles.miniLabel);
                 GUILayout.FlexibleSpace();
                 GUILayout.EndVertical();
                 GUILayout.FlexibleSpace();
                 if (GUILayout.Button("Refresh", EditorStyles.miniButton) == true) {
 
-                    if (this.data.Refresh(this.guid) == true) {
+                    if (this.data.Refresh(this.item.guid) == true) {
 
-                        this.UpdateDeps();
+                        this.UpdateReferences();
 
                     }
 
                 }
                 GUILayout.EndHorizontal();
-                this.height = 0f;
                 if (this.heightCalc == false) {
 
                     var rect = GUILayoutUtility.GetLastRect();
@@ -520,8 +631,8 @@ namespace ME.ResourceCollector {
 
                 }
                 
-                this.scrollPosition = GUILayout.BeginScrollView(this.scrollPosition);
-                foreach (var dep in this.deps) {
+                this.scrollPositionReferences = GUILayout.BeginScrollView(this.scrollPositionReferences);
+                foreach (var dep in this.item.references) {
 
                     EditorGUI.BeginDisabledGroup(true);
                     EditorGUILayout.ObjectField(dep, typeof(Object), allowSceneObjects: true);
@@ -536,23 +647,64 @@ namespace ME.ResourceCollector {
                     
                 }
                 GUILayout.EndScrollView();
-                
-                if (Event.current.type == EventType.Repaint && this.heightCalc == false) {
 
-                    this.height += 10f;
-                    if (this.size.y > this.height) {
-                        this.size.y = this.height;
-                        this.ShowAsDropDown(this.rect, this.size);
+            }
+            
+            if (this.item.deps != null) {
+
+                GUILayout.BeginHorizontal(GUILayout.Height(20f));
+                GUILayout.BeginVertical();
+                GUILayout.FlexibleSpace();
+                GUILayout.Label("Reference to: " + this.item.deps.Count, EditorStyles.miniLabel);
+                GUILayout.FlexibleSpace();
+                GUILayout.EndVertical();
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Refresh", EditorStyles.miniButton) == true) {
+
+                    if (this.data.Refresh(this.item.guid) == true) {
+
+                        this.UpdateDeps();
+
                     }
 
-                    this.heightCalc = true;
+                }
+                GUILayout.EndHorizontal();
+                if (this.heightCalc == false) {
+
+                    var rect = GUILayoutUtility.GetLastRect();
+                    this.height += rect.height;
 
                 }
+                
+                this.scrollPositionDependencies = GUILayout.BeginScrollView(this.scrollPositionDependencies);
+                foreach (var dep in this.item.deps) {
 
-            } else {
+                    EditorGUI.BeginDisabledGroup(true);
+                    EditorGUILayout.ObjectField(dep.obj, typeof(Object), allowSceneObjects: true);
+                    EditorGUI.EndDisabledGroup();
+                    var rect = GUILayoutUtility.GetLastRect();
+                    HierarchyGUIEditor.OnElementGUI(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(dep.obj)), rect);
+                    if (this.heightCalc == false) {
+
+                        this.height += rect.height + 2f;
+
+                    }
+                    
+                }
+                GUILayout.EndScrollView();
                 
-                GUILayout.Label("References Count: 0");
-                
+            }
+
+            if (Event.current.type == EventType.Repaint && this.heightCalc == false) {
+
+                this.height += 10f;
+                if (this.size.y > this.height) {
+                    this.size.y = this.height;
+                    this.ShowAsDropDown(this.rect, this.size);
+                }
+
+                this.heightCalc = true;
+
             }
 
         }
@@ -588,6 +740,19 @@ namespace ME.ResourceCollector {
 
         private static System.Reflection.MethodInfo getTextureSizeMethod;
 
+        public static long GetAtlasSize(AtlasData atlas) {
+            
+            var atlasSize = 0L;
+            foreach (var tex in atlas.previews) {
+
+                atlasSize += GetTextureSize(tex);
+
+            }
+
+            return atlasSize;
+
+        }
+
         public static long GetTextureSize(UnityEngine.Texture texture) {
 
             if (Utils.getTextureSizeMethod == null) {
@@ -617,9 +782,47 @@ namespace ME.ResourceCollector {
 
         }
 
-        public static long GetObjectSize(ResourceCollector data, object obj, System.Collections.Generic.HashSet<object> visited,
-                                         System.Collections.Generic.List<UnityEngine.Object> deps, bool collectUnityObjects) {
+        public struct AtlasData {
 
+            public UnityEngine.U2D.SpriteAtlas atlas;
+            public Texture2D[] previews;
+
+        }
+
+        private static Dictionary<UnityEngine.U2D.SpriteAtlas, AtlasData> listAtlases;
+        private static void CollectAtlases() {
+
+            if (listAtlases != null && listAtlases.Count > 0) return;
+            
+            listAtlases = new Dictionary<UnityEngine.U2D.SpriteAtlas, AtlasData>();
+            var atlasesGUID = AssetDatabase.FindAssets("t:spriteatlas");
+            foreach (var atlasGUID in atlasesGUID) {
+
+                var atlas = AssetDatabase.LoadAssetAtPath<UnityEngine.U2D.SpriteAtlas>(AssetDatabase.GUIDToAssetPath(atlasGUID));
+                if (atlas != null) {
+                                        
+                    var previews = typeof(UnityEditor.U2D.SpriteAtlasExtensions).GetMethod("GetPreviewTextures", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                    listAtlases.Add(atlas, new AtlasData() {
+                        atlas = atlas,
+                        previews = (Texture2D[])previews.Invoke(null, new [] { atlas }),
+                    });
+                                        
+                }
+                                    
+            }
+            
+        }
+
+        public static long GetObjectSize(ResourceCollector data,
+                                         object root,
+                                         object obj,
+                                         System.Collections.Generic.HashSet<object> visited,
+                                         System.Collections.Generic.List<ResourceCollector.DependencyInfo> deps,
+                                         bool collectUnityObjects,
+                                         int depth = 0) {
+
+            CollectAtlases();
+            
             if (visited == null) {
                 visited = new System.Collections.Generic.HashSet<object>();
             }
@@ -630,7 +833,7 @@ namespace ME.ResourceCollector {
             }
 
             visited.Add(ptr);
-
+            
             var pointerSize = System.IntPtr.Size;
             var size = 0L;
             if (obj == null) {
@@ -655,13 +858,13 @@ namespace ME.ResourceCollector {
                             continue;
                         }
 
-                        size += Utils.GetObjectSize(data, mat, visited, deps, collectUnityObjects);
+                        size += Utils.GetObjectSize(data, obj, mat, visited, deps, collectUnityObjects, depth);
 
                     }
 
                 } else {
 
-                    size += Utils.GetObjectSize(data, typedObj.sharedMaterial, visited, deps, collectUnityObjects);
+                    size += Utils.GetObjectSize(data, obj, typedObj.sharedMaterial, visited, deps, collectUnityObjects, depth);
 
                 }
 
@@ -675,7 +878,7 @@ namespace ME.ResourceCollector {
                 }
 
                 var mesh = typedObj;
-                deps.Add(mesh);
+                deps.Add(new ResourceCollector.DependencyInfo(mesh, depth));
                 if (data.GetSize(mesh, out var s) == true) {
                     size += s;
                 } else {
@@ -696,7 +899,7 @@ namespace ME.ResourceCollector {
                     return pointerSize;
                 }
 
-                deps.Add(mesh);
+                deps.Add(new ResourceCollector.DependencyInfo(mesh, depth));
 
                 if (data.GetSize(mesh, out var s) == true) {
                     size += s;
@@ -713,7 +916,7 @@ namespace ME.ResourceCollector {
                     return pointerSize;
                 }
 
-                size += Utils.GetObjectSize(data, typedObj.sprite, visited, deps, collectUnityObjects);
+                size += Utils.GetObjectSize(data, obj, typedObj.sprite, visited, deps, collectUnityObjects, depth);
 
             }
 
@@ -733,8 +936,24 @@ namespace ME.ResourceCollector {
                 tempResults.AddRange(go.GetComponents<UnityEngine.Component>());
                 foreach (var item in tempResults) {
 
-                    size += Utils.GetObjectSize(data, item, visited, deps, collectUnityObjects);
+                    size += Utils.GetObjectSize(data, obj, item, visited, deps, collectUnityObjects, depth);
 
+                }
+
+            }
+
+            if (type == typeof(UnityEngine.U2D.SpriteAtlas)) {
+                
+                var atlas = (UnityEngine.U2D.SpriteAtlas)obj;
+                if (atlas == null) {
+                    return pointerSize;
+                }
+
+                deps.Add(new ResourceCollector.DependencyInfo(atlas, depth));
+                if (listAtlases.TryGetValue(atlas, out var atlasData) == true) {
+                    
+                    size += Utils.GetAtlasSize(atlasData);
+                    
                 }
 
             }
@@ -771,7 +990,7 @@ namespace ME.ResourceCollector {
 
                 foreach (var item in tempResults) {
 
-                    size += Utils.GetObjectSize(data, item, visited, deps, collectUnityObjects);
+                    size += Utils.GetObjectSize(data, obj, item, visited, deps, collectUnityObjects, depth);
 
                 }
 
@@ -782,7 +1001,7 @@ namespace ME.ResourceCollector {
                     return pointerSize;
                 }
 
-                deps.Add(mat);
+                deps.Add(new ResourceCollector.DependencyInfo(mat, depth));
                 var props = mat.GetTexturePropertyNames();
                 foreach (var prop in props) {
 
@@ -791,7 +1010,8 @@ namespace ME.ResourceCollector {
                         continue;
                     }
 
-                    size += Utils.GetObjectSize(data, tex, visited, deps, collectUnityObjects);
+                    if (root == null) deps.Add(new ResourceCollector.DependencyInfo(tex, depth));
+                    size += Utils.GetObjectSize(data, obj, tex, visited, deps, collectUnityObjects, depth + 1);
 
                 }
 
@@ -802,12 +1022,30 @@ namespace ME.ResourceCollector {
                     return pointerSize;
                 }
 
-                var tex = sprite.texture;
-                deps.Add((UnityEngine.Sprite)obj);
-                if (data.GetSize(tex, out var s) == true) {
-                    size += s;
-                } else {
-                    size += data.UpdateSize(tex, Utils.GetTextureSize(tex));
+                var useAtlas = false;
+                foreach (var atlas in listAtlases) {
+
+                    if (atlas.Value.atlas.CanBindTo(sprite) == true) {
+
+                        deps.Add(new ResourceCollector.DependencyInfo(atlas.Value.atlas, depth));
+                        size += data.UpdateSize(atlas.Value.atlas, Utils.GetAtlasSize(atlas.Value));
+                        useAtlas = true;
+                        break;
+
+                    }
+
+                }
+
+                if (useAtlas == false) {
+
+                    var tex = sprite.texture;
+                    deps.Add(new ResourceCollector.DependencyInfo((UnityEngine.Sprite)obj, depth));
+                    if (data.GetSize(tex, out var s) == true) {
+                        size += s;
+                    } else {
+                        size += data.UpdateSize(tex, Utils.GetTextureSize(tex));
+                    }
+
                 }
 
             } else if (type == typeof(UnityEngine.Texture) ||
@@ -820,7 +1058,7 @@ namespace ME.ResourceCollector {
                     return pointerSize;
                 }
 
-                deps.Add(tex);
+                deps.Add(new ResourceCollector.DependencyInfo(tex, depth));
                 if (data.GetSize(tex, out var s) == true) {
                     size += s;
                 } else {
@@ -846,12 +1084,6 @@ namespace ME.ResourceCollector {
 
             } else {
 
-                if (typeof(UnityEngine.ScriptableObject).IsAssignableFrom(type) == true) {
-
-                    deps.Add((UnityEngine.ScriptableObject)obj);
-
-                }
-
                 var fields = type.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
                 if (fields.Length == 0 && type.IsValueType == true) {
 
@@ -859,8 +1091,10 @@ namespace ME.ResourceCollector {
 
                 } else {
 
-                    foreach (var field in fields) {
+                    System.Action deferred = null;
+                    foreach (var fieldInfo in fields) {
 
+                        var field = fieldInfo;
                         var fieldType = field.FieldType;
                         if (collectUnityObjects == false && typeof(UnityEngine.Object).IsAssignableFrom(fieldType) == true) {
 
@@ -893,8 +1127,8 @@ namespace ME.ResourceCollector {
 
                         } else if (fieldType.IsValueType == true) {
 
-                            size += Utils.GetObjectSize(data, field.GetValue(obj), visited, deps,
-                                                        collectUnityObjects); //Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf(fieldType);
+                            size += Utils.GetObjectSize(data, obj, field.GetValue(obj), visited, deps, 
+                                                        collectUnityObjects, depth);
 
                         } else if (fieldType.IsArray == true && fieldType.GetArrayRank() == 1) {
 
@@ -902,18 +1136,34 @@ namespace ME.ResourceCollector {
                             if (arr != null) {
 
                                 for (var i = 0; i < arr.Length; ++i) {
-                                    size += Utils.GetObjectSize(data, arr.GetValue(i), visited, deps, collectUnityObjects);
+                                    var d = depth + GetDepth(obj, arr.GetValue(i), deps, depth);
+                                    if (d > depth) {
+                                        var idx = i;
+                                        deferred += () => {
+                                            size += Utils.GetObjectSize(data, obj, arr.GetValue(idx), visited, deps, collectUnityObjects, d);
+                                        };
+                                    } else {
+                                        size += Utils.GetObjectSize(data, obj, arr.GetValue(i), visited, deps, collectUnityObjects, d);
+                                    }
                                 }
 
                             }
 
                         } else {
 
-                            size += Utils.GetObjectSize(data, field.GetValue(obj), visited, deps, collectUnityObjects);
-
+                            var d = depth + GetDepth(obj, field.GetValue(obj), deps, depth);
+                            if (d > depth) {
+                                deferred += () => {
+                                    size += Utils.GetObjectSize(data, obj, field.GetValue(obj), visited, deps, collectUnityObjects, d);
+                                };
+                            } else {
+                                size += Utils.GetObjectSize(data, obj, field.GetValue(obj), visited, deps, collectUnityObjects, d);
+                            }
+                            
                         }
 
                     }
+                    deferred?.Invoke();
 
                 }
 
@@ -921,6 +1171,59 @@ namespace ME.ResourceCollector {
 
             return size;
 
+        }
+
+        private static int GetDepth(object root, object obj, List<ResourceCollector.DependencyInfo> deps, int depth) {
+
+            if (obj is ScriptableObject so) {
+
+                deps.Add(new ResourceCollector.DependencyInfo(so, depth));
+                return 1;
+
+            }
+            
+            var v1 = GetPrefabRoot(root);
+            var v2 = GetPrefabRoot(obj);
+            if (v1 != null && v2 != null) {
+
+                if (v1 != v2) {
+                    
+                    deps.Add(new ResourceCollector.DependencyInfo((Object)obj, depth));
+                    return 1;
+                    
+                }
+                
+                return 0;
+
+            }
+
+            return 0;
+
+        }
+
+        private static Transform GetPrefabRoot(object obj) {
+            
+            if (obj == null) return null;
+            
+            var type = obj.GetType();
+            if (typeof(GameObject) == type ||
+                typeof(Component).IsAssignableFrom(type) == true) {
+
+                var o = (Object)obj;
+                if (o == null) return null;
+
+                if (typeof(GameObject) == type) {
+
+                    return ((GameObject)obj).transform.root;
+
+                }
+                
+                return ((Component)obj).transform.root;
+                
+            }
+
+            return null;
+            
         }
 
         private static int CalcTotalIndices(UnityEngine.Mesh mesh) {
