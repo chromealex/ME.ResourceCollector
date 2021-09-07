@@ -563,9 +563,21 @@ namespace ME.ResourceCollector {
             
         }
 
+        public class DepComparer : IEqualityComparer<ResourceCollector.DependencyInfo> {
+
+            public bool Equals(ResourceCollector.DependencyInfo x, ResourceCollector.DependencyInfo y) {
+                return x.obj == y.obj;
+            }
+
+            public int GetHashCode(ResourceCollector.DependencyInfo obj) {
+                return obj.obj.GetHashCode();
+            }
+
+        }
+
         private void UpdateDeps() {
             
-            this.item.deps = this.data.GetDependencies(this.item.guid).Where(x => {
+            this.item.deps = this.data.GetDependencies(this.item.guid).Distinct(new DepComparer()).Where(x => {
 
                 return x.depth == 0;
 
