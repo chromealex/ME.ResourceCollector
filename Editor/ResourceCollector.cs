@@ -387,6 +387,7 @@ namespace ME.ResourceCollector {
                 "t:Sprite",
                 "t:ScriptableObject",
                 "t:prefab",
+                "t:spriteatlas",
             };
 
             try {
@@ -589,7 +590,7 @@ namespace ME.ResourceCollector {
                     
                 }
 
-                return -1L;
+                return 0L;
 
             }).ToList();
             this.heightCalc = false;
@@ -606,7 +607,7 @@ namespace ME.ResourceCollector {
                     
                 }
 
-                return -1L;
+                return 0L;
 
             }).ToList();
             this.heightCalc = false;
