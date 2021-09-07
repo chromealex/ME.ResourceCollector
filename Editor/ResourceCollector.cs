@@ -205,6 +205,7 @@ namespace ME.ResourceCollector {
 
         private void UpdateSize(ref Item item, System.Collections.Generic.HashSet<object> visited = null) {
             
+            Utils.CollectAtlases(item.obj is UnityEngine.U2D.SpriteAtlas);
             item.size = Utils.GetObjectSize(this, null, item.obj, visited, item.deps, collectUnityObjects: true);
             var obj = item.obj;
             item.deps.RemoveAll(x => x.obj == obj);
@@ -564,33 +565,22 @@ namespace ME.ResourceCollector {
             
         }
 
-        public class DepComparer : IEqualityComparer<ResourceCollector.DependencyInfo> {
-
-            public bool Equals(ResourceCollector.DependencyInfo x, ResourceCollector.DependencyInfo y) {
-                return x.obj == y.obj;
-            }
-
-            public int GetHashCode(ResourceCollector.DependencyInfo obj) {
-                return obj.obj.GetHashCode();
-            }
-
-        }
-
         private void UpdateDeps() {
             
-            this.item.deps = this.data.GetDependencies(this.item.guid).Distinct(new DepComparer()).Where(x => {
+            this.item.deps = this.data.GetDependencies(this.item.guid).Where(x => {
 
                 return x.depth == 0;
 
             }).OrderByDescending(x => {
 
-                if (this.data.GetSize(x.obj, out var size) == true) {
+                return this.data.GetSizeStr(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(x.obj)));
+                /*if (this.data.GetSize(x.obj, out var size) == true) {
                     
                     return size;
                     
                 }
 
-                return 0L;
+                return 0L;*/
 
             }).ToList();
             this.heightCalc = false;
@@ -803,9 +793,28 @@ namespace ME.ResourceCollector {
         }
 
         private static Dictionary<UnityEngine.U2D.SpriteAtlas, AtlasData> listAtlases;
-        private static void CollectAtlases() {
+        public static void CollectAtlases(bool force = false) {
 
-            if (listAtlases != null && listAtlases.Count > 0) return;
+            if (Utils.listAtlases != null) {
+
+                foreach (var atlas in Utils.listAtlases) {
+
+                    if (atlas.Key == null) {
+
+                        force = true;
+                        break;
+
+                    }
+
+                }
+
+            }
+
+            if (force == false && listAtlases != null && listAtlases.Count > 0) {
+
+                return;
+                
+            }
             
             listAtlases = new Dictionary<UnityEngine.U2D.SpriteAtlas, AtlasData>();
             var atlasesGUID = AssetDatabase.FindAssets("t:spriteatlas");
@@ -834,8 +843,6 @@ namespace ME.ResourceCollector {
                                          bool collectUnityObjects,
                                          int depth = 0) {
 
-            CollectAtlases();
-            
             if (visited == null) {
                 visited = new System.Collections.Generic.HashSet<object>();
             }
@@ -945,6 +952,12 @@ namespace ME.ResourceCollector {
                     return pointerSize;
                 }
 
+                if (GetPrefabRoot(go) != GetPrefabRoot(root)) {
+
+                    deps.Add(new ResourceCollector.DependencyInfo(go, depth));
+
+                }
+
                 var tempResults = new System.Collections.Generic.List<UnityEngine.Component>();
                 tempResults.AddRange(go.GetComponents<UnityEngine.Component>());
                 foreach (var item in tempResults) {
@@ -965,7 +978,7 @@ namespace ME.ResourceCollector {
                 deps.Add(new ResourceCollector.DependencyInfo(atlas, depth));
                 if (listAtlases.TryGetValue(atlas, out var atlasData) == true) {
                     
-                    size += Utils.GetAtlasSize(atlasData);
+                    size += data.UpdateSize(atlasData.atlas, Utils.GetAtlasSize(atlasData));
                     
                 }
 
@@ -982,6 +995,12 @@ namespace ME.ResourceCollector {
                 }
 
                 tempResults.AddRange(go.GetComponents<UnityEngine.Component>());
+                
+                if (GetPrefabRoot(go) != GetPrefabRoot(root)) {
+
+                    deps.Add(new ResourceCollector.DependencyInfo(go, depth));
+
+                }
 
                 System.Action<UnityEngine.GameObject> collectGo = null;
                 collectGo = (UnityEngine.GameObject goRoot) => {
@@ -1040,8 +1059,7 @@ namespace ME.ResourceCollector {
 
                     if (atlas.Value.atlas.CanBindTo(sprite) == true) {
 
-                        deps.Add(new ResourceCollector.DependencyInfo(atlas.Value.atlas, depth));
-                        size += data.UpdateSize(atlas.Value.atlas, Utils.GetAtlasSize(atlas.Value));
+                        size += GetObjectSize(data, root, atlas.Value.atlas, visited, deps, collectUnityObjects, depth);
                         useAtlas = true;
                         break;
 
