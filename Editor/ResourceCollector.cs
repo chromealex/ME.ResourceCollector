@@ -353,7 +353,7 @@ namespace ME.ResourceCollector {
     #region MENU
     public static class Menu {
 
-        [UnityEditor.MenuItem("Tools/ME.ResourceCollector/Recalculate Resource Sizes")]
+        [UnityEditor.MenuItem("Tools/ME.ResourceCollector/Recalculate Resource Sizes...")]
         public static void CalculateSizes() {
 
             var data = ResourceCollector.GetData();
@@ -374,7 +374,7 @@ namespace ME.ResourceCollector {
 
         }
         
-        [UnityEditor.MenuItem("Tools/ME.ResourceCollector/Update Resources")]
+        [UnityEditor.MenuItem("Tools/ME.ResourceCollector/Update Resources...")]
         public static void Collect() {
 
             var data = ResourceCollector.GetData();
@@ -433,9 +433,32 @@ namespace ME.ResourceCollector {
     #endregion
     
     #region AssetsImporter
+    public static class AssetsImporterMenu {
+        
+        [MenuItem("Tools/ME.ResourceCollector/Refresh Assets on Import")]
+        public static void AutoImport() {
+
+            var state = EditorPrefs.GetBool("ME.ResourceCollector.AutoImport", false);
+            EditorPrefs.SetBool("ME.ResourceCollector.AutoImport", !state);
+
+        }
+
+        [MenuItem("Tools/ME.ResourceCollector/Refresh Assets on Import", isValidateFunction: true)]
+        public static bool AutoImportValidation() {
+
+            var state = EditorPrefs.GetBool("ME.ResourceCollector.AutoImport", false);
+            UnityEditor.Menu.SetChecked("Tools/ME.ResourceCollector/Refresh Assets on Import", state);
+            return true;
+
+        }
+
+    }
+    
     public class AssetsImporter : AssetPostprocessor {
 
         public static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths) {
+
+            if (EditorPrefs.GetBool("ME.ResourceCollector.AutoImport", false) == false) return;
 
             var data = ResourceCollector.GetData();
             if (data == null) return;
